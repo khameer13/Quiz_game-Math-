@@ -1,109 +1,192 @@
-const questions = [];
+'use strict';
 
-// Generate 15 random addition and subtraction questions
-for (let i = 0; i < 15; i++) {
-  const num1 = Math.floor(Math.random() * 999) + 10; // 3-digit number
-  const num2 = Math.floor(Math.random() * 999) + 10; // 3-digit number
-  const operator = Math.random() < 0.5 ? '+' : '-'; // Randomly choose addition or subtraction
-  const expression = `${num1} ${operator} ${num2}`;
-  const answer = eval(expression); // Evaluate the expression to get the answer
+const TOTAL_QUESTIONS = 15;
+const POINTS_CORRECT = 1;
+const POINTS_WRONG = -2;
+const BEST_KEY = 'mathQuiz.best';
 
-  questions.push({ question: expression, answer });
+const $ = (id) => document.getElementById(id);
+
+const state = {
+  questions: [],
+  index: 0,
+  score: 0,
+  correct: 0,
+  answers: [],
+  startTime: 0,
+  timerId: null,
+  locked: false,
+};
+
+// Random integer in [min, max]
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-let currentQuestionIndex = 0;
-let startTime;
-let endTime;
-let score = 0;
+// Builds 3-digit addition/subtraction questions. The answer is computed directly
+// (no eval), and subtraction keeps the larger number first so answers are never negative.
+function generateQuestions(count) {
+  const list = [];
+  for (let i = 0; i < count; i++) {
+    let a = randInt(100, 999);
+    let b = randInt(100, 999);
+    const op = Math.random() < 0.5 ? '+' : '-';
+    if (op === '-' && b > a) [a, b] = [b, a];
+    list.push({ text: `${a} ${op === '-' ? '−' : '+'} ${b}`, answer: op === '+' ? a + b : a - b });
+  }
+  return list;
+}
+
+function formatTime(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function elapsedSeconds() {
+  return Math.floor((Date.now() - state.startTime) / 1000);
+}
+
+function readBest() {
+  try {
+    return JSON.parse(localStorage.getItem(BEST_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function saveBest(result) {
+  try {
+    localStorage.setItem(BEST_KEY, JSON.stringify(result));
+  } catch {
+    /* storage unavailable (private mode etc.) — best score just isn't kept */
+  }
+}
+
+function isBetter(a, b) {
+  if (!b) return true;
+  return a.score > b.score || (a.score === b.score && a.seconds < b.seconds);
+}
+
+function showBest(el) {
+  const best = readBest();
+  el.textContent = best ? `Best: ${best.score} points in ${formatTime(best.seconds)}` : '';
+}
+
+function showScreen(id) {
+  for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id;
+}
 
 function startQuiz() {
-  startTime = new Date().getTime();
-  displayQuestion();
-  updateScoreboard();
+  state.questions = generateQuestions(TOTAL_QUESTIONS);
+  state.index = 0;
+  state.score = 0;
+  state.correct = 0;
+  state.answers = [];
+  state.locked = false;
+  state.startTime = Date.now();
 
-  // Listen for the Enter key to submit answers
-  document.getElementById('answerInput').addEventListener('keyup', function (event) {
-    if (event.key === 'Enter') {
-      submitAnswer();
+  clearInterval(state.timerId);
+  $('timer').textContent = '0:00';
+  state.timerId = setInterval(() => {
+    $('timer').textContent = formatTime(elapsedSeconds());
+  }, 250);
+
+  showScreen('quizScreen');
+  renderQuestion();
+}
+
+function renderQuestion() {
+  const q = state.questions[state.index];
+  $('question').textContent = `${q.text} = ?`;
+  $('qCounter').textContent = `${state.index + 1} / ${TOTAL_QUESTIONS}`;
+  $('liveScore').textContent = state.score;
+  $('progressBar').style.width = `${(state.index / TOTAL_QUESTIONS) * 100}%`;
+  $('progress').setAttribute('aria-valuenow', String(state.index));
+
+  const input = $('answerInput');
+  input.value = '';
+  input.classList.remove('shake');
+  input.focus();
+}
+
+function submitAnswer(event) {
+  event.preventDefault();
+  if (state.locked) return;
+
+  const input = $('answerInput');
+  const raw = input.value.trim();
+  if (!/^-?\d+$/.test(raw)) {
+    // Empty or non-numeric input is not counted as an answer
+    $('feedback').textContent = 'Enter a whole number.';
+    $('feedback').className = 'feedback warn';
+    input.classList.remove('shake');
+    void input.offsetWidth; // restart the animation
+    input.classList.add('shake');
+    return;
+  }
+
+  const q = state.questions[state.index];
+  const given = Number(raw);
+  const ok = given === q.answer;
+
+  state.score += ok ? POINTS_CORRECT : POINTS_WRONG;
+  if (ok) state.correct++;
+  state.answers.push({ text: q.text, answer: q.answer, given, ok });
+
+  $('liveScore').textContent = state.score;
+  $('feedback').textContent = ok ? 'Correct! +1' : `Not quite — ${q.text} = ${q.answer}  (−2)`;
+  $('feedback').className = `feedback ${ok ? 'good' : 'bad'}`;
+
+  state.locked = true;
+  setTimeout(() => {
+    state.locked = false;
+    state.index++;
+    if (state.index < TOTAL_QUESTIONS) {
+      renderQuestion();
+    } else {
+      endQuiz();
     }
-  });
-}
-
-function displayQuestion() {
-  const questionElement = document.getElementById('question');
-  const answerInput = document.getElementById('answerInput');
-
-  const currentQuestion = questions[currentQuestionIndex];
-
-  questionElement.textContent = currentQuestion.question;
-  answerInput.value = ''; // Clear the answer input field
-}
-
-function submitAnswer() {
-  const answerInput = document.getElementById('answerInput');
-  const userAnswer = parseInt(answerInput.value, 10);
-
-  handleAnswer(userAnswer);
-}
-
-function handleAnswer(userAnswer) {
-  const currentQuestion = questions[currentQuestionIndex];
-
-  if (currentQuestion && userAnswer === currentQuestion.answer) {
-    // Correct answer
-    score += 1;
-  } else if (currentQuestion) {
-    // Wrong answer
-    score -= 2;
-  }
-
-  // Move to the next question or end the quiz
-  currentQuestionIndex++;
-  if (currentQuestionIndex < questions.length) {
-    displayQuestion();
-  } else {
-    endQuiz();
-  }
-
-  // Update real-time score
-  updateRealTimeScore();
-}
-
-function updateScoreboard() {
-  const scoreboardElement = document.getElementById('scoreboard');
-  scoreboardElement.innerHTML = `<h3>Score: </h3>`;
-}
-
-
-function updateRealTimeScore() {
-  const realTimeScoreElement = document.getElementById('realTimeScore');
-  if (!realTimeScoreElement) {
-    // Create a new element if it doesn't exist
-    const newElement = document.createElement('div');
-    newElement.id = 'realTimeScore';
-    newElement.textContent = `Real-Time Score: ${score}`;
-    document.querySelector('.quiz-container').appendChild(newElement);
-  } else {
-    // Update the existing element
-    realTimeScoreElement.textContent = `Real-Time Score: ${score}`;
-  }
+  }, ok ? 450 : 1100);
 }
 
 function endQuiz() {
-  endTime = new Date().getTime();
-  const totalTime = Math.floor((endTime - startTime) / 1000); // Convert to seconds
+  clearInterval(state.timerId);
+  const seconds = elapsedSeconds();
+  $('progressBar').style.width = '100%';
 
-  // Display results in a popup window
-  const popupContent = `
-    <h2>Quiz Results</h2>
-    <p>Total Score: ${30}</p>
-    <p>Achieved Score: ${score}</p>
-    <p>Total Time Taken: ${totalTime} seconds</p>
-  `;
+  const result = { score: state.score, seconds };
+  const prevBest = readBest();
+  const newBest = isBetter(result, prevBest);
+  if (newBest) saveBest(result);
 
-  const popupWindow = window.open('', 'Quiz Results', 'width=400,height=300');
-  popupWindow.document.body.innerHTML = popupContent;
+  $('finalScore').textContent = state.score;
+  $('finalCorrect').textContent = `${state.correct}/${TOTAL_QUESTIONS}`;
+  $('finalTime').textContent = formatTime(seconds);
+
+  const pct = state.correct / TOTAL_QUESTIONS;
+  $('resultTitle').textContent =
+    pct === 1 ? 'Perfect score!' : pct >= 0.8 ? 'Great job!' : pct >= 0.5 ? 'Good effort!' : 'Keep practising!';
+
+  $('bestEnd').textContent = newBest ? 'New personal best!' : '';
+  if (!newBest) showBest($('bestEnd'));
+
+  const list = $('reviewList');
+  list.replaceChildren(
+    ...state.answers.map((a) => {
+      const li = document.createElement('li');
+      li.className = a.ok ? 'ok' : 'wrong';
+      li.textContent = a.ok ? `${a.text} = ${a.answer} ✓` : `${a.text} = ${a.answer} (you said ${a.given})`;
+      return li;
+    })
+  );
+
+  $('feedback').textContent = '';
+  showScreen('resultScreen');
+  $('restartBtn').focus();
 }
 
-// Start the quiz
-startQuiz();
+$('startBtn').addEventListener('click', startQuiz);
+$('restartBtn').addEventListener('click', startQuiz);
+$('answerForm').addEventListener('submit', submitAnswer);
+showBest($('bestStart'));
