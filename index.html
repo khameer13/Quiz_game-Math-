@@ -3,19 +3,67 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quiz Application</title>
+  <meta name="description" content="Mental math quiz: 15 addition and subtraction questions against the clock.">
+  <title>Math Quiz</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="quiz-container">
-    <div id="question"></div>
-    <div>
-      <input type="text" id="answerInput" placeholder="Enter your answer...">
-      <button id="submit_button" onclick="submitAnswer()">Submit</button>
-    </div>
-  
-    <div id="scoreboard"> Score Board</div>
-  </div>
+  <main class="card" aria-live="polite">
+
+    <!-- Start screen -->
+    <section id="startScreen" class="screen">
+      <p class="eyebrow">Mental math</p>
+      <h1>Math Quiz</h1>
+      <p class="lead">15 addition and subtraction questions. Answer as fast and as accurately as you can.</p>
+      <ul class="rules">
+        <li><span class="pill good">+1</span> for each correct answer</li>
+        <li><span class="pill bad">−2</span> for each wrong answer</li>
+        <li><span class="pill">⏱</span> the clock runs until the last question</li>
+      </ul>
+      <p class="best" id="bestStart"></p>
+      <button class="btn primary" id="startBtn" type="button">Start quiz</button>
+    </section>
+
+    <!-- Quiz screen -->
+    <section id="quizScreen" class="screen" hidden>
+      <header class="stats">
+        <div class="stat"><span class="label">Question</span><span class="value" id="qCounter">1 / 15</span></div>
+        <div class="stat"><span class="label">Score</span><span class="value" id="liveScore">0</span></div>
+        <div class="stat"><span class="label">Time</span><span class="value" id="timer">0:00</span></div>
+      </header>
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="15" aria-valuenow="0" id="progress">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+
+      <div class="question" id="question" aria-label="Current question"></div>
+
+      <form id="answerForm" class="answer-row" autocomplete="off">
+        <input type="text" id="answerInput" inputmode="numeric"
+               placeholder="Your answer" aria-label="Your answer">
+        <button class="btn primary" type="submit" id="submit_button">Submit</button>
+      </form>
+      <p class="feedback" id="feedback" role="status"></p>
+    </section>
+
+    <!-- Results screen -->
+    <section id="resultScreen" class="screen" hidden>
+      <p class="eyebrow">Quiz complete</p>
+      <h2 id="resultTitle">Nice work!</h2>
+      <div class="result-grid">
+        <div class="result"><span class="value" id="finalScore">0</span><span class="label">Score (max 15)</span></div>
+        <div class="result"><span class="value" id="finalCorrect">0/15</span><span class="label">Correct</span></div>
+        <div class="result"><span class="value" id="finalTime">0:00</span><span class="label">Time taken</span></div>
+      </div>
+      <p class="best" id="bestEnd"></p>
+      <details class="review">
+        <summary>Review answers</summary>
+        <ol id="reviewList"></ol>
+      </details>
+      <button class="btn primary" id="restartBtn" type="button">Play again</button>
+    </section>
+
+  </main>
+  <footer class="foot">Made by <a href="https://github.com/khameer13">khameer13</a></footer>
   <script src="app.js"></script>
 </body>
 </html>
